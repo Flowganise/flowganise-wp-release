@@ -3,7 +3,7 @@
  * Plugin Name: Flowganise Analytics
  * Plugin URI: https://flowganise.com
  * Description: Integrates Flowganise analytics tracking with WordPress.
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: Flowganise
  * Author URI: https://www.flowganise.com
  * Text Domain: flowganise-analytics
@@ -14,7 +14,7 @@
 
 defined('ABSPATH') || exit;
 
-define('FLOWGANISE_VERSION', '1.0.2');
+define('FLOWGANISE_VERSION', '1.0.3');
 
 class Flowganise_Analytics {
     private static $instance = null;
@@ -31,6 +31,14 @@ class Flowganise_Analytics {
         $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
         $this->api_base = $is_local_dev ? 'http://localhost:4000/api' : 'https://backend.flowganise.com/api';
 
+        // Load required files
+        require_once plugin_dir_path(__FILE__) . 'includes/class-flowganise-updater.php';
+        require_once plugin_dir_path(__FILE__) . 'includes/class-flowganise-cache-manager.php';
+        
+        if (is_admin()) {
+            require_once plugin_dir_path(__FILE__) . 'includes/class-flowganise-debug.php';
+        }
+
         add_action('admin_menu', array($this, 'add_menu'));
         add_action('wp_head', array($this, 'add_tracking_code'));
         add_action('wp_ajax_flowganise_connect', array($this, 'handle_connect_request'));
@@ -42,8 +50,44 @@ class Flowganise_Analytics {
         }
 
         // Initialize the updater
-        require_once plugin_dir_path(__FILE__) . 'includes/class-flowganise-updater.php';
         new Flowganise_Updater(__FILE__, FLOWGANISE_VERSION);
+        
+        // Register activation and deactivation hooks
+        register_activation_hook(__FILE__, array($this, 'activate'));
+        register_deactivation_hook(__FILE__, array($this, 'deactivate'));
+    }
+    
+    public function activate() {
+        // Store current version for upgrade detection
+        $stored_version = get_option('flowganise_version');
+        
+        if ($stored_version !== FLOWGANISE_VERSION) {
+            update_option('flowganise_version', FLOWGANISE_VERSION);
+            
+            // Clear any caches
+            $this->clear_caches();
+            
+            // Run any version-specific upgrade routines
+            if (!empty($stored_version)) {
+                $this->maybe_upgrade($stored_version, FLOWGANISE_VERSION);
+            }
+        }
+    }
+    
+    public function deactivate() {
+        // Clear any caches on deactivation
+        $this->clear_caches();
+    }
+    
+    private function clear_caches() {
+        // Use our centralized cache manager
+        Flowganise_Cache_Manager::clear_all_caches();
+    }
+    
+    private function maybe_upgrade($old_version, $new_version) {
+        // Handle version-specific upgrades if needed
+        // This can be expanded as the plugin evolves
+        error_log("Flowganise upgrade from {$old_version} to {$new_version}");
     }
 
     public function add_menu() {
@@ -54,24 +98,25 @@ class Flowganise_Analytics {
             'flowganise-settings',
             array($this, 'settings_page')
         );
-
+   
         // Add admin scripts only on our settings page
         add_action('admin_enqueue_scripts', function($hook) {
             if ('settings_page_flowganise-settings' !== $hook) {
                 return;
             }
-
+   
             wp_enqueue_script(
                 'flowganise-admin',
                 plugins_url('js/admin.js', __FILE__),
                 array('jquery'),
-                '1.0.0',
+                FLOWGANISE_VERSION,
                 true
             );
 
             wp_localize_script('flowganise-admin', 'flowganiseAdmin', array(
                 'ajaxUrl' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('flowganise_connect')
+                'nonce' => wp_create_nonce('flowganise_connect'),
+                'version' => FLOWGANISE_VERSION
             ));
         });
     }
@@ -224,7 +269,11 @@ class Flowganise_Analytics {
     
         // Check for local development environment
         $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
-        $script_url = $is_local_dev ? 'http://localhost:5173/index.min.js' : 'https://script.flowganise.com/';
+        
+        // Add cache busting parameter for the script
+        $script_base = $is_local_dev ? 'http://localhost:5173/index.min.js' : 'https://script.flowganise.com/';
+        $cache_buster = '?v=' . FLOWGANISE_VERSION . '-' . substr(md5($organization_id), 0, 8);
+        $script_url = $script_base . $cache_buster;
         ?>
         <script async src="<?php echo esc_url($script_url); ?>"></script>
         <script>
@@ -232,11 +281,16 @@ class Flowganise_Analytics {
             function fgan(){flowganise.push(arguments);}
             fgan('js', new Date());
             fgan('config', <?php echo json_encode($organization_id); ?>);
-            <?php if ($is_local_dev): ?>
-            console.log('Flowganise: Using local development script');
+            <?php if ($is_local_dev || $this->is_debug_mode()): ?>
+            console.log('Flowganise: Version <?php echo esc_js(FLOWGANISE_VERSION); ?>');
             <?php endif; ?>
         </script>
         <?php
+    }
+    
+    private function is_debug_mode() {
+        return (defined('FLOWGANISE_DEBUG') && FLOWGANISE_DEBUG) || 
+               (isset($_GET['flowganise_debug']) && current_user_can('manage_options'));
     }
 
     public function track_transaction($order_id) {
@@ -280,4 +334,8 @@ class Flowganise_Analytics {
 }
 
 // Initialize plugin
-add_action('plugins_loaded', array('Flowganise_Analytics', 'instance'));
+function flowganise_init() {
+    // Wait for init hook to ensure proper loading order
+    Flowganise_Analytics::instance(); 
+}
+add_action('init', 'flowganise_init', 5);

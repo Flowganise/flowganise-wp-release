@@ -1,4 +1,9 @@
 jQuery(document).ready(function($) {
+    // Log version info to help with debugging
+    if (typeof flowganiseAdmin !== 'undefined' && flowganiseAdmin.version) {
+        console.log('Flowganise Admin JS - Version: ' + flowganiseAdmin.version);
+    }
+
     $('#flowganise-connect').on('click', function() {
         const $button = $(this);
         const $status = $('#flowganise-connect-status');
