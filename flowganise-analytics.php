@@ -3,7 +3,7 @@
  * Plugin Name: Flowganise Analytics
  * Plugin URI: https://flowganise.com
  * Description: Integrates Flowganise analytics tracking with WordPress.
- * Version: 1.0.3
+ * Version: 1.1.0
  * Author: Flowganise
  * Author URI: https://www.flowganise.com
  * Text Domain: flowganise-analytics
@@ -14,7 +14,7 @@
 
 defined('ABSPATH') || exit;
 
-define('FLOWGANISE_VERSION', '1.0.3');
+define('FLOWGANISE_VERSION', '1.1.0');
 
 class Flowganise_Analytics {
     private static $instance = null;
@@ -44,6 +44,9 @@ class Flowganise_Analytics {
         add_action('wp_ajax_flowganise_connect', array($this, 'handle_connect_request'));
         add_action('wp_ajax_flowganise_disconnect', array($this, 'handle_disconnect_request'));
 
+        // Add AJAX handler for saving settings directly
+        add_action('wp_ajax_flowganise_save_settings', array($this, 'handle_save_settings_request'));
+
         // WooCommerce integration
         if (class_exists('WooCommerce')) {
             add_action('woocommerce_thankyou', array($this, 'track_transaction'));
@@ -55,6 +58,38 @@ class Flowganise_Analytics {
         // Register activation and deactivation hooks
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
+
+        // Add site URL to admin script variables
+        add_action('admin_enqueue_scripts', function($hook) {
+            if ('settings_page_flowganise-settings' !== $hook) {
+                return;
+            }
+
+            wp_enqueue_script(
+                'flowganise-admin',
+                plugins_url('js/admin.js', __FILE__),
+                array('jquery'),
+                FLOWGANISE_VERSION,
+                true
+            );
+
+            // Determine the frontend URL based on environment
+            $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
+            $flowganise_url = $is_local_dev ? 'http://localhost:3000' : 'https://app.flowganise.com';
+
+            // Override with constant if defined
+            if (defined('FLOWGANISE_APP_URL')) {
+                $flowganise_url = FLOWGANISE_APP_URL;
+            }
+
+            wp_localize_script('flowganise-admin', 'flowganiseAdmin', array(
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('flowganise_connect'),
+                'version' => FLOWGANISE_VERSION,
+                'siteUrl' => get_site_url(),
+                'flowganiseUrl' => $flowganise_url // Make sure this is properly set
+            ));
+        });
     }
     
     public function activate() {
@@ -113,10 +148,21 @@ class Flowganise_Analytics {
                 true
             );
 
+            // Determine the frontend URL based on environment
+            $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
+            $flowganise_url = $is_local_dev ? 'http://localhost:3000' : 'https://app.flowganise.com';
+
+            // Override with constant if defined
+            if (defined('FLOWGANISE_APP_URL')) {
+                $flowganise_url = FLOWGANISE_APP_URL;
+            }
+
             wp_localize_script('flowganise-admin', 'flowganiseAdmin', array(
                 'ajaxUrl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('flowganise_connect'),
-                'version' => FLOWGANISE_VERSION
+                'version' => FLOWGANISE_VERSION,
+                'siteUrl' => get_site_url(),
+                'flowganiseUrl' => $flowganise_url // Make sure flowganiseUrl is properly set
             ));
         });
     }
@@ -205,18 +251,13 @@ class Flowganise_Analytics {
             // Get full site URL
             $site_url = get_site_url();
             
-            // Remove trailing slashes while keeping the protocol
-            $domain = rtrim($site_url, '/');
-
-            // Call the Flowganise API
+            // Call Flowganise API
+            $api_url = flowganiseAdmin.flowganiseUrl . '/api/wordpress/connect';
             $response = wp_remote_get(add_query_arg(
-                array('domain' => $domain),
-                $this->api_base . '/connect'
+                array('domain' => $site_url),
+                $api_url
             ), array(
-                'timeout' => 15,
-                'headers' => array(
-                    'Content-Type' => 'application/json'
-                )
+                'timeout' => 15
             ));
 
             if (is_wp_error($response)) {
@@ -227,13 +268,9 @@ class Flowganise_Analytics {
             $body = json_decode(wp_remote_retrieve_body($response), true);
             $status = wp_remote_retrieve_response_code($response);
 
-            if ($status === 404) {
-                wp_send_json_error('This domain is not registered with Flowganise. Please sign up first at flowganise.com');
-                return;
-            }
-
-            if ($status !== 200) {
-                wp_send_json_error('Unexpected response from Flowganise');
+            if (!$body['success']) {
+                // Enhance error message to be more helpful
+                wp_send_json_error('This domain is not registered with Flowganise. Please make sure you\'ve entered the correct website URL in your Flowganise dashboard.');
                 return;
             }
 
@@ -246,12 +283,61 @@ class Flowganise_Analytics {
             update_option('flowganise_settings', array(
                 'organization_id' => $body['organization_id'],
                 'connected_at' => current_time('mysql'),
+                'domain' => $site_url
+            ));
+
+            // Return success with callback URL to complete the connection
+            $callback_url = flowganiseAdmin.flowganiseUrl . '/oauth/wordpress?' . 
+                            'teamId=' . urlencode($body['organization_id']) . 
+                            '&siteUrl=' . urlencode($site_url);
+            
+            wp_send_json_success(array(
+                'message' => 'Successfully connected with Flowganise',
+                'organization_id' => $body['organization_id'],
+                'callback_url' => $callback_url
+            ));
+            
+        } catch (Exception $e) {
+            wp_send_json_error('Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Handle saving settings directly (called when using the direct API)
+     */
+    public function handle_save_settings_request() {
+        try {
+            // Verify nonce
+            if (!check_ajax_referer('flowganise_connect', false, false)) {
+                wp_send_json_error('Invalid nonce');
+                return;
+            }
+
+            // Check permissions
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error('Unauthorized');
+                return;
+            }
+
+            // Get the organization ID from the request
+            $organization_id = isset($_POST['organization_id']) ? sanitize_text_field($_POST['organization_id']) : '';
+            $domain = isset($_POST['domain']) ? sanitize_text_field($_POST['domain']) : get_site_url();
+
+            if (empty($organization_id)) {
+                wp_send_json_error('Missing organization ID');
+                return;
+            }
+
+            // Save the settings
+            update_option('flowganise_settings', array(
+                'organization_id' => $organization_id,
+                'connected_at' => current_time('mysql'),
                 'domain' => $domain
             ));
 
             wp_send_json_success(array(
                 'message' => 'Successfully connected with Flowganise',
-                'organization_id' => $body['organization_id']
+                'organization_id' => $organization_id
             ));
             
         } catch (Exception $e) {

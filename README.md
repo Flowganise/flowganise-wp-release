@@ -32,6 +32,10 @@ If you need help with this plugin or your Flowganise account:
 
 ## Changelog
 
+### 1.1.0
+
+- Improved connection process using OAuth authentication
+
 ### 1.0.0
 
 - Initial release

@@ -9,29 +9,25 @@ jQuery(document).ready(function($) {
         const $status = $('#flowganise-connect-status');
         
         $button.prop('disabled', true);
-        $status.html('<div class="notice notice-info"><p>Connecting...</p></div>');
-
-        $.post(
-            flowganiseAdmin.ajaxUrl,
-            {
-                action: 'flowganise_connect',
-                _ajax_nonce: flowganiseAdmin.nonce
-            },
-            function(response) {
-                if (response.success) {
-                    $status.html('<div class="notice notice-success"><p>' + response.data.message + '</p></div>');
-                    setTimeout(function() {
-                        window.location.reload();
-                    }, 1000);
-                } else {
-                    $status.html('<div class="notice notice-error"><p>Error: ' + response.data + '</p></div>');
-                    $button.prop('disabled', false);
-                }
-            }
-        ).fail(function(xhr, status, error) {
-            $status.html('<div class="notice notice-error"><p>Error: ' + error + '</p></div>');
-            $button.prop('disabled', false);
-        });
+        $status.html('<div class="notice notice-info"><p>Redirecting to Flowganise...</p></div>');
+        
+        // Store that we're connecting for when we return
+        localStorage.setItem('flowganise_connecting', 'true');
+        
+        // Make sure flowganiseUrl is defined and log all available properties in flowganiseAdmin for debugging
+        console.log('flowganiseAdmin object:', flowganiseAdmin);
+        
+        // Default URL if flowganiseUrl is not defined
+        const baseUrl = flowganiseAdmin.flowganiseUrl || 'https://app.flowganise.com';
+        
+        // Properly construct the authorization URL using absolute URLs
+        const authUrl = baseUrl + "/oauth/wordpress/authorize?" + 
+                      "callback=" + encodeURIComponent(window.location.href);
+        
+        console.log("Redirecting to auth URL:", authUrl);
+        
+        // Redirect to authorization page
+        window.location.href = authUrl;
     });
 
     $('#flowganise-disconnect').on('click', function() {
@@ -52,4 +48,62 @@ jQuery(document).ready(function($) {
             );
         }
     });
+    
+    // Check if we're returning from the authorization flow
+    if (localStorage.getItem('flowganise_connecting') === 'true') {
+        localStorage.removeItem('flowganise_connecting');
+        
+        // Get the team ID from the URL query parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const teamId = urlParams.get('team_id');
+        
+        if (!teamId) {
+            $('#flowganise-connect-status').html('<div class="notice notice-error"><p>Authorization failed: No team ID received</p></div>');
+            $('#flowganise-connect').prop('disabled', false);
+            return;
+        }
+        
+        // Show connecting status
+        $('#flowganise-connect-status').html('<div class="notice notice-info"><p>Finalizing connection...</p></div>');
+        
+        // Save connection settings with the received team ID
+        $.post(
+            flowganiseAdmin.ajaxUrl,
+            {
+                action: 'flowganise_save_settings',
+                _ajax_nonce: flowganiseAdmin.nonce,
+                organization_id: teamId,
+                domain: window.location.origin
+            },
+            function(response) {
+                if (response.success) {
+                    $('#flowganise-connect-status').html('<div class="notice notice-success"><p>Successfully connected with Flowganise!</p></div>');
+                    
+                    // Updated callback URL path
+                    const callbackUrl = baseUrl + '/oauth/wordpress?' + 
+                        'teamId=' + encodeURIComponent(teamId) + 
+                        '&siteUrl=' + encodeURIComponent(window.location.origin);
+                    
+                    // Use a hidden iframe to make this request without leaving the page
+                    $('<iframe>', {
+                        src: callbackUrl,
+                        width: 0,
+                        height: 0,
+                        style: 'display:none;'
+                    }).appendTo('body');
+                    
+                    // Reload the current page after a brief delay
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    $('#flowganise-connect-status').html('<div class="notice notice-error"><p>Error saving settings: ' + (response.data || 'Unknown error') + '</p></div>');
+                    $('#flowganise-connect').prop('disabled', false);
+                }
+            }
+        ).fail(function(xhr, status, error) {
+            $('#flowganise-connect-status').html('<div class="notice notice-error"><p>Error saving settings: ' + error + '</p></div>');
+            $('#flowganise-connect').prop('disabled', false);
+        });
+    }
 });
