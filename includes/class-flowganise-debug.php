@@ -104,9 +104,9 @@ class Flowganise_Debug {
         $settings = get_option('flowganise_settings', array());
         
         // Mask sensitive data
-        if (isset($settings['organization_id'])) {
-            $org_id = $settings['organization_id'];
-            $settings['organization_id'] = substr($org_id, 0, 4) . '...' . substr($org_id, -4);
+        if (isset($settings['site_id'])) {
+            $site_id = $settings['site_id'];
+            $settings['site_id'] = substr($site_id, 0, 4) . '...' . substr($site_id, -4);
         }
         
         return $settings;

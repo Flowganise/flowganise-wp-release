@@ -3,7 +3,7 @@
  * Plugin Name: Flowganise Analytics
  * Plugin URI: https://flowganise.com
  * Description: Integrates Flowganise analytics tracking with WordPress.
- * Version: 1.1.0
+ * Version: 2.0.0
  * Author: Flowganise
  * Author URI: https://www.flowganise.com
  * Text Domain: flowganise-analytics
@@ -14,7 +14,7 @@
 
 defined('ABSPATH') || exit;
 
-define('FLOWGANISE_VERSION', '1.1.0');
+define('FLOWGANISE_VERSION', '2.0.0');
 
 class Flowganise_Analytics {
     private static $instance = null;
@@ -75,7 +75,7 @@ class Flowganise_Analytics {
 
             // Determine the frontend URL based on environment
             $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
-            $flowganise_url = $is_local_dev ? 'http://localhost:3000' : 'https://app.flowganise.com';
+            $flowganise_url = $is_local_dev ? 'http://localhost:4000' : 'https://flowganise.com';
 
             // Override with constant if defined
             if (defined('FLOWGANISE_APP_URL')) {
@@ -150,7 +150,7 @@ class Flowganise_Analytics {
 
             // Determine the frontend URL based on environment
             $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
-            $flowganise_url = $is_local_dev ? 'http://localhost:3000' : 'https://app.flowganise.com';
+            $flowganise_url = $is_local_dev ? 'http://localhost:4000' : 'https://flowganise.com';
 
             // Override with constant if defined
             if (defined('FLOWGANISE_APP_URL')) {
@@ -169,7 +169,7 @@ class Flowganise_Analytics {
 
     public function settings_page() {
         $settings = get_option('flowganise_settings', array());
-        $is_connected = !empty($settings['organization_id']);
+        $is_connected = !empty($settings['site_id']);
         ?>
         <div class="wrap">
             <h1><?php echo esc_html__('Flowganise Analytics Settings', 'flowganise-analytics'); ?></h1>
@@ -179,8 +179,8 @@ class Flowganise_Analytics {
                     <p>
                         <?php 
                         printf(
-                            esc_html__('Connected to Flowganise (Organization ID: %s)', 'flowganise-analytics'),
-                            esc_html($settings['organization_id'])
+                            esc_html__('Connected to Flowganise (Site ID: %s)', 'flowganise-analytics'),
+                            esc_html($settings['site_id'])
                         ); 
                         ?>
                     </p>
@@ -281,19 +281,19 @@ class Flowganise_Analytics {
 
             // Save the settings
             update_option('flowganise_settings', array(
-                'organization_id' => $body['organization_id'],
+                'site_id' => $body['organization_id'],
                 'connected_at' => current_time('mysql'),
                 'domain' => $site_url
             ));
 
             // Return success with callback URL to complete the connection
             $callback_url = flowganiseAdmin.flowganiseUrl . '/oauth/wordpress?' . 
-                            'teamId=' . urlencode($body['organization_id']) . 
+                            'site_id=' . urlencode($body['organization_id']) . 
                             '&siteUrl=' . urlencode($site_url);
             
             wp_send_json_success(array(
                 'message' => 'Successfully connected with Flowganise',
-                'organization_id' => $body['organization_id'],
+                'site_id' => $body['organization_id'],
                 'callback_url' => $callback_url
             ));
             
@@ -319,25 +319,25 @@ class Flowganise_Analytics {
                 return;
             }
 
-            // Get the organization ID from the request
-            $organization_id = isset($_POST['organization_id']) ? sanitize_text_field($_POST['organization_id']) : '';
+            // Get the site ID from the request
+            $site_id = isset($_POST['site_id']) ? sanitize_text_field($_POST['site_id']) : '';
             $domain = isset($_POST['domain']) ? sanitize_text_field($_POST['domain']) : get_site_url();
 
-            if (empty($organization_id)) {
-                wp_send_json_error('Missing organization ID');
+            if (empty($site_id)) {
+                wp_send_json_error('Missing site ID');
                 return;
             }
 
             // Save the settings
             update_option('flowganise_settings', array(
-                'organization_id' => $organization_id,
+                'site_id' => $site_id,
                 'connected_at' => current_time('mysql'),
                 'domain' => $domain
             ));
 
             wp_send_json_success(array(
                 'message' => 'Successfully connected with Flowganise',
-                'organization_id' => $organization_id
+                'site_id' => $site_id
             ));
             
         } catch (Exception $e) {
@@ -347,31 +347,29 @@ class Flowganise_Analytics {
 
     public function add_tracking_code() {
         $settings = get_option('flowganise_settings', array());
-        $organization_id = isset($settings['organization_id']) ? $settings['organization_id'] : '';
+        $site_id = isset($settings['site_id']) ? $settings['site_id'] : '';
     
-        if (empty($organization_id)) {
+        if (empty($site_id)) {
             return;
         }
     
         // Check for local development environment
         $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
         
-        // Add cache busting parameter for the script
-        $script_base = $is_local_dev ? 'http://localhost:5173/index.min.js' : 'https://script.flowganise.com/';
-        $cache_buster = '?v=' . FLOWGANISE_VERSION . '-' . substr(md5($organization_id), 0, 8);
-        $script_url = $script_base . $cache_buster;
+        // Use the new simplified script injection format
+        if ($is_local_dev) {
+            $script_url = 'http://localhost:5173/index.min.js?site-id=' . urlencode($site_id);
+        } else {
+            $script_url = 'https://script.flowganise.com/?site-id=' . urlencode($site_id);
+        }
         ?>
-        <script async src="<?php echo esc_url($script_url); ?>"></script>
-        <script>
-            window.flowganise = window.flowganise || [];
-            function fgan(){flowganise.push(arguments);}
-            fgan('js', new Date());
-            fgan('config', <?php echo json_encode($organization_id); ?>);
-            <?php if ($is_local_dev || $this->is_debug_mode()): ?>
-            console.log('Flowganise: Version <?php echo esc_js(FLOWGANISE_VERSION); ?>');
-            <?php endif; ?>
-        </script>
+        <script src="<?php echo esc_url($script_url); ?>" async></script>
         <?php
+        if ($is_local_dev || $this->is_debug_mode()): ?>
+        <script>
+            console.log('Flowganise: Version <?php echo esc_js(FLOWGANISE_VERSION); ?>');
+        </script>
+        <?php endif;
     }
     
     private function is_debug_mode() {
@@ -381,7 +379,7 @@ class Flowganise_Analytics {
 
     public function track_transaction($order_id) {
         $settings = get_option('flowganise_settings', array());
-        if (empty($settings['organization_id'])) {
+        if (empty($settings['site_id'])) {
             return;
         }
 
@@ -399,17 +397,10 @@ class Flowganise_Analytics {
         // Track transaction
         ?>
         <script>
-            fgan('transaction', 
-                <?php echo json_encode($order->get_currency()); ?>,
-                <?php echo (float) $order->get_total(); ?>,
-                'transaction',
-                {
-                    order_id: <?php echo json_encode($order->get_order_number()); ?>,
-                    payment_method: <?php echo json_encode($order->get_payment_method_title()); ?>,
-                    coupon: <?php echo json_encode(implode(', ', $order->get_coupon_codes())); ?>,
-                    shipping: <?php echo json_encode($order->get_shipping_method()); ?>
-                }
-            );
+            fgan("purchase", {
+                currency: <?php echo json_encode($order->get_currency()); ?>,
+                value: <?php echo (float) $order->get_total(); ?>
+            });
         </script>
         <?php
 

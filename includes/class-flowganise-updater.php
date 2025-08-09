@@ -81,12 +81,24 @@ class Flowganise_Updater {
         }
 
         if (version_compare($this->version, $release->tag_name, '<')) {
+            // Prefer release asset over zipball if available
+            $package_url = $release->zipball_url;
+            if (!empty($release->assets) && is_array($release->assets)) {
+                foreach ($release->assets as $asset) {
+                    if (isset($asset->browser_download_url) && 
+                        (strpos($asset->name, '.zip') !== false || strpos($asset->content_type, 'zip') !== false)) {
+                        $package_url = $asset->browser_download_url;
+                        break;
+                    }
+                }
+            }
+            
             $plugin = array(
                 'slug' => $this->plugin_slug,
                 'plugin' => $this->plugin_basename,
                 'new_version' => $release->tag_name,
                 'url' => $release->html_url,
-                'package' => $release->zipball_url,
+                'package' => $package_url,
                 'icons' => array(),
                 'banners' => array(),
                 'banners_rtl' => array(),
@@ -98,12 +110,24 @@ class Flowganise_Updater {
             $transient->response[$this->plugin_basename] = (object) $plugin;
         } else {
             // Make sure the plugin is listed in the no_update property
+            // Prefer release asset over zipball if available
+            $package_url = $release->zipball_url;
+            if (!empty($release->assets) && is_array($release->assets)) {
+                foreach ($release->assets as $asset) {
+                    if (isset($asset->browser_download_url) && 
+                        (strpos($asset->name, '.zip') !== false || strpos($asset->content_type, 'zip') !== false)) {
+                        $package_url = $asset->browser_download_url;
+                        break;
+                    }
+                }
+            }
+            
             $plugin = array(
                 'slug' => $this->plugin_slug,
                 'plugin' => $this->plugin_basename,
                 'new_version' => $this->version,
                 'url' => $release->html_url,
-                'package' => $release->zipball_url,
+                'package' => $package_url,
                 'icons' => array(),
                 'banners' => array(),
                 'banners_rtl' => array(),
@@ -149,7 +173,7 @@ class Flowganise_Updater {
             'requires' => '5.0',
             'tested' => get_bloginfo('version'),
             'last_updated' => $release->published_at,
-            'download_link' => $release->zipball_url,
+            'download_link' => $this->get_download_url($release),
             'sections' => array(
                 'description' => $this->get_description(),
                 'changelog' => nl2br($release->body)
@@ -172,6 +196,19 @@ class Flowganise_Updater {
                 <li>No configuration needed</li>
             </ul>
         ';
+    }
+    
+    private function get_download_url($release) {
+        // Prefer release asset over zipball if available
+        if (!empty($release->assets) && is_array($release->assets)) {
+            foreach ($release->assets as $asset) {
+                if (isset($asset->browser_download_url) && 
+                    (strpos($asset->name, '.zip') !== false || strpos($asset->content_type, 'zip') !== false)) {
+                    return $asset->browser_download_url;
+                }
+            }
+        }
+        return $release->zipball_url;
     }
     
     public function post_install($true, $hook_extra, $result) {
