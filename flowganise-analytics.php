@@ -3,7 +3,7 @@
  * Plugin Name: Flowganise Analytics
  * Plugin URI: https://flowganise.com
  * Description: Integrates Flowganise analytics tracking with WordPress.
- * Version: 2.0.0
+ * Version: 2.0.1
  * Author: Flowganise
  * Author URI: https://www.flowganise.com
  * Text Domain: flowganise-analytics
@@ -14,11 +14,10 @@
 
 defined('ABSPATH') || exit;
 
-define('FLOWGANISE_VERSION', '2.0.0');
+define('FLOWGANISE_VERSION', '2.0.1');
 
 class Flowganise_Analytics {
     private static $instance = null;
-    private $api_base;
 
     public static function instance() {
         if (is_null(self::$instance)) {
@@ -28,9 +27,6 @@ class Flowganise_Analytics {
     }
 
     public function __construct() {
-        $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
-        $this->api_base = $is_local_dev ? 'http://localhost:4000/api' : 'https://backend.flowganise.com/api';
-
         // Load required files
         require_once plugin_dir_path(__FILE__) . 'includes/class-flowganise-updater.php';
         require_once plugin_dir_path(__FILE__) . 'includes/class-flowganise-cache-manager.php';
@@ -397,10 +393,24 @@ class Flowganise_Analytics {
         // Track transaction
         ?>
         <script>
-            fgan("purchase", {
-                currency: <?php echo json_encode($order->get_currency()); ?>,
-                value: <?php echo (float) $order->get_total(); ?>
-            });
+            console.log('Flowganise: Tracking transaction for order <?php echo esc_js($order->get_order_number()); ?>');
+            
+            // Wait for fgan function to be available
+            function trackPurchase() {
+                if (typeof fgan !== 'undefined') {
+                    fgan("purchase", {
+                        currency: <?php echo json_encode($order->get_currency()); ?>,
+                        value: <?php echo (float) $order->get_total(); ?>
+                    });
+                    console.log('Flowganise: Purchase event tracked successfully');
+                } else {
+                    // Retry after 100ms if fgan is not ready yet
+                    setTimeout(trackPurchase, 100);
+                }
+            }
+            
+            // Start tracking attempt
+            trackPurchase();
         </script>
         <?php
 
