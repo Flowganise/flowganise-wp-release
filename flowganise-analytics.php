@@ -3,7 +3,7 @@
  * Plugin Name: Flowganise Analytics
  * Plugin URI: https://flowganise.com
  * Description: Integrates Flowganise analytics tracking with WordPress.
- * Version: 2.0.1
+ * Version: 3.0.0
  * Author: Flowganise
  * Author URI: https://www.flowganise.com
  * Text Domain: flowganise-analytics
@@ -14,7 +14,7 @@
 
 defined('ABSPATH') || exit;
 
-define('FLOWGANISE_VERSION', '2.0.1');
+define('FLOWGANISE_VERSION', '3.0.0');
 
 class Flowganise_Analytics {
     private static $instance = null;
@@ -356,7 +356,7 @@ class Flowganise_Analytics {
         if ($is_local_dev) {
             $script_url = 'http://localhost:5173/index.min.js?site-id=' . urlencode($site_id);
         } else {
-            $script_url = 'https://script.flowganise.com/?site-id=' . urlencode($site_id);
+            $script_url = 'https://tracker.flowganise.com/?site-id=' . urlencode($site_id);
         }
         ?>
         <script src="<?php echo esc_url($script_url); ?>" async></script>
