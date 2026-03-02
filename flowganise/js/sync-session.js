@@ -1,15 +1,15 @@
 /**
  * Flowganise Session Sync
  *
- * Syncs localStorage sessionId/visitorId and device info to a server-side transient.
+ * Syncs localStorage fgan_sessionId/fgan_visitorId and device info to a server-side transient.
  * Also sets a cookie with the visitor ID so the woocommerce_checkout_order_processed
  * hook can look up the transient for server-side purchase tracking.
  */
 (function() {
     'use strict';
 
-    var sessionId = localStorage.getItem('sessionId');
-    var visitorId = localStorage.getItem('visitorId');
+    var sessionId = localStorage.getItem('fgan_sessionId');
+    var visitorId = localStorage.getItem('fgan_visitorId');
 
     // Only sync if we have both IDs and the flowganiseSync config is available
     if (sessionId && visitorId && typeof flowganiseSync !== 'undefined') {
@@ -26,6 +26,16 @@
         formData.append('screen_height', window.screen ? window.screen.height : 0);
         formData.append('user_agent', navigator.userAgent || '');
         formData.append('language', navigator.language || 'en-US');
+
+        // Include referrer and UTM data from the tracking script's session
+        var initialReferrer = localStorage.getItem('fgan_initial_referrer_' + sessionId);
+        if (initialReferrer) {
+            formData.append('initial_referrer', initialReferrer);
+        }
+        var utmParams = localStorage.getItem('fgan_utm_params_' + sessionId);
+        if (utmParams) {
+            formData.append('utm_params', utmParams);
+        }
 
         // Store visitor ID in a cookie so the server-side purchase hook can find the transient.
         // WC sessions are unreliable (temporary IDs change per request), but cookies persist.

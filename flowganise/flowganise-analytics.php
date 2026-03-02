@@ -3,7 +3,7 @@
  * Plugin Name: Flowganise Analytics
  * Plugin URI: https://flowganise.com
  * Description: Integrates Flowganise analytics tracking with WordPress.
- * Version: 3.0.1
+ * Version: 3.1.0
  * Author: Flowganise
  * Author URI: https://www.flowganise.com
  * Text Domain: flowganise-analytics
@@ -14,7 +14,7 @@
 
 defined('ABSPATH') || exit;
 
-define('FLOWGANISE_VERSION', '3.0.1');
+define('FLOWGANISE_VERSION', '3.1.0');
 
 class Flowganise_Analytics {
     private static $instance = null;
@@ -307,13 +307,11 @@ class Flowganise_Analytics {
         // Check for local development environment
         $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
         
-        // Use the new simplified script injection format
-        // Add date-based version for cache busting (refreshes daily)
-        $version_date = gmdate('Ymd');
+        // Loader script (t.js) handles cache busting internally via content-hashed tracker URL
         if ($is_local_dev) {
-            $script_url = 'http://localhost:5173/index.min.js?site-id=' . urlencode($site_id) . '&v=' . $version_date;
+            $script_url = 'http://localhost:5173/index.min.js?site-id=' . urlencode($site_id);
         } else {
-            $script_url = 'https://tracker.flowganise.com/?site-id=' . urlencode($site_id) . '&v=' . $version_date;
+            $script_url = 'https://tracker.flowganise.com/t.js?site-id=' . urlencode($site_id);
         }
         ?>
         <script src="<?php echo esc_url($script_url); ?>" async></script>
@@ -350,14 +348,16 @@ class Flowganise_Analytics {
             // so we use transients which persist in the database regardless of session state.
             $transient_key = 'flowganise_' . sanitize_key($visitor_id);
             $sync_data = array(
-                'session_id'      => $session_id,
-                'visitor_id'      => $visitor_id,
-                'viewport_width'  => isset($_POST['viewport_width']) ? intval($_POST['viewport_width']) : 0,
-                'viewport_height' => isset($_POST['viewport_height']) ? intval($_POST['viewport_height']) : 0,
-                'screen_width'    => isset($_POST['screen_width']) ? intval($_POST['screen_width']) : 0,
-                'screen_height'   => isset($_POST['screen_height']) ? intval($_POST['screen_height']) : 0,
-                'user_agent'      => isset($_POST['user_agent']) ? sanitize_text_field($_POST['user_agent']) : '',
-                'language'        => isset($_POST['language']) ? sanitize_text_field($_POST['language']) : 'en-US',
+                'session_id'       => $session_id,
+                'visitor_id'       => $visitor_id,
+                'viewport_width'   => isset($_POST['viewport_width']) ? intval($_POST['viewport_width']) : 0,
+                'viewport_height'  => isset($_POST['viewport_height']) ? intval($_POST['viewport_height']) : 0,
+                'screen_width'     => isset($_POST['screen_width']) ? intval($_POST['screen_width']) : 0,
+                'screen_height'    => isset($_POST['screen_height']) ? intval($_POST['screen_height']) : 0,
+                'user_agent'       => isset($_POST['user_agent']) ? sanitize_text_field($_POST['user_agent']) : '',
+                'language'         => isset($_POST['language']) ? sanitize_text_field($_POST['language']) : 'en-US',
+                'initial_referrer' => isset($_POST['initial_referrer']) ? esc_url_raw($_POST['initial_referrer']) : '',
+                'utm_params'       => isset($_POST['utm_params']) ? sanitize_text_field($_POST['utm_params']) : '',
             );
 
             // Store for 1 hour (more than enough for a checkout flow)
@@ -448,6 +448,17 @@ class Flowganise_Analytics {
                     'user_agent'      => $sync_data['user_agent'] ?: '',
                     'language'        => $sync_data['language'] ?: 'en-US',
                 );
+
+                // Include referrer and UTM data for traffic attribution
+                if (!empty($sync_data['initial_referrer'])) {
+                    $device_info['initial_referrer'] = $sync_data['initial_referrer'];
+                }
+                if (!empty($sync_data['utm_params'])) {
+                    $utm_decoded = json_decode($sync_data['utm_params'], true);
+                    if (is_array($utm_decoded)) {
+                        $device_info['utm_params'] = $utm_decoded;
+                    }
+                }
 
                 // Clean up the transient after use
                 delete_transient($transient_key);
