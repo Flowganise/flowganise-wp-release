@@ -1,12 +1,12 @@
 <?php
 /**
- * Plugin Name: Flowganise Analytics
- * Plugin URI: https://flowganise.com
- * Description: Integrates Flowganise analytics tracking with WordPress.
- * Version: 3.1.0
- * Author: Flowganise
- * Author URI: https://www.flowganise.com
- * Text Domain: flowganise-analytics
+ * Plugin Name: Anry Analytics
+ * Plugin URI: https://anry.io
+ * Description: Integrates Anry analytics tracking with WordPress.
+ * Version: 3.2.0
+ * Author: Anry
+ * Author URI: https://anry.io
+ * Text Domain: anry
  * Domain Path: /languages
  * Requires at least: 5.0
  * Requires PHP: 7.2
@@ -14,9 +14,9 @@
 
 defined('ABSPATH') || exit;
 
-define('FLOWGANISE_VERSION', '3.1.0');
+define('ANRY_VERSION', '3.2.0');
 
-class Flowganise_Analytics {
+class Anry_Analytics {
     private static $instance = null;
 
     public static function instance() {
@@ -28,17 +28,17 @@ class Flowganise_Analytics {
 
     public function __construct() {
         // Load required files
-        require_once plugin_dir_path(__FILE__) . 'includes/class-flowganise-updater.php';
-        require_once plugin_dir_path(__FILE__) . 'includes/class-flowganise-cache-manager.php';
+        require_once plugin_dir_path(__FILE__) . 'includes/class-anry-updater.php';
+        require_once plugin_dir_path(__FILE__) . 'includes/class-anry-cache-manager.php';
         
         if (is_admin()) {
-            require_once plugin_dir_path(__FILE__) . 'includes/class-flowganise-debug.php';
+            require_once plugin_dir_path(__FILE__) . 'includes/class-anry-debug.php';
         }
 
         add_action('admin_menu', array($this, 'add_menu'));
         add_action('wp_head', array($this, 'add_tracking_code'));
-        add_action('wp_ajax_flowganise_disconnect', array($this, 'handle_disconnect_request'));
-        add_action('wp_ajax_flowganise_save_settings', array($this, 'handle_save_settings_request'));
+        add_action('wp_ajax_anry_disconnect', array($this, 'handle_disconnect_request'));
+        add_action('wp_ajax_anry_save_settings', array($this, 'handle_save_settings_request'));
 
         // WooCommerce integration - server-side purchase tracking only
         if (class_exists('WooCommerce')) {
@@ -46,14 +46,14 @@ class Flowganise_Analytics {
             // This fires for ALL payment methods including COD, immediately after checkout
             add_action('woocommerce_checkout_order_processed', array($this, 'track_purchase_server_side'), 10, 1);
             // Session sync endpoint for server-side tracking
-            add_action('wp_ajax_flowganise_sync_session', array($this, 'sync_session'));
-            add_action('wp_ajax_nopriv_flowganise_sync_session', array($this, 'sync_session'));
+            add_action('wp_ajax_anry_sync_session', array($this, 'sync_session'));
+            add_action('wp_ajax_nopriv_anry_sync_session', array($this, 'sync_session'));
             // Enqueue session sync script
             add_action('wp_enqueue_scripts', array($this, 'enqueue_sync_script'));
         }
 
         // Initialize the updater
-        new Flowganise_Updater(__FILE__, FLOWGANISE_VERSION);
+        new Anry_Updater(__FILE__, ANRY_VERSION);
         
         // Register activation and deactivation hooks
         register_activation_hook(__FILE__, array($this, 'activate'));
@@ -61,33 +61,43 @@ class Flowganise_Analytics {
 
         // Add site URL to admin script variables
         add_action('admin_enqueue_scripts', function($hook) {
-            if ('settings_page_flowganise-settings' !== $hook) {
+            if ('settings_page_anry-settings' !== $hook) {
                 return;
             }
 
             wp_enqueue_script(
-                'flowganise-admin',
+                'anry-admin',
                 plugins_url('js/admin.js', __FILE__),
                 array('jquery'),
-                FLOWGANISE_VERSION,
+                ANRY_VERSION,
                 true
             );
 
-            // Determine the frontend URL based on environment
+            // Determine the frontend URL based on environment.
+            // app.anry.io, not anry.io: js/admin.js appends
+            // /oauth/wordpress/authorize to this, and that page lives in the
+            // app. anry.io is the separate marketing site and would 404 it.
+            // flowganise.com keeps working for installs still carrying it,
+            // because it redirects there rather than to the marketing site.
             $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
-            $flowganise_url = $is_local_dev ? 'http://localhost:3000' : 'https://flowganise.com';
+            $anry_url = $is_local_dev ? 'http://localhost:3000' : 'https://app.anry.io';
 
             // Override with constant if defined
-            if (defined('FLOWGANISE_APP_URL')) {
-                $flowganise_url = FLOWGANISE_APP_URL;
+            // ANRY_APP_URL is the current name; FLOWGANISE_APP_URL still works
+            // because it is documented for wp-config.php and a site already
+            // relying on it should not silently fall back to the default.
+            if (defined('ANRY_APP_URL')) {
+                $anry_url = ANRY_APP_URL;
+            } elseif (defined('FLOWGANISE_APP_URL')) {
+                $anry_url = FLOWGANISE_APP_URL;
             }
 
-            wp_localize_script('flowganise-admin', 'flowganiseAdmin', array(
+            wp_localize_script('anry-admin', 'anryAdmin', array(
                 'ajaxUrl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('flowganise_connect'),
-                'version' => FLOWGANISE_VERSION,
+                'version' => ANRY_VERSION,
                 'siteUrl' => get_site_url(),
-                'flowganiseUrl' => $flowganise_url // Make sure this is properly set
+                'anryUrl' => $anry_url // Make sure this is properly set
             ));
         });
     }
@@ -96,15 +106,15 @@ class Flowganise_Analytics {
         // Store current version for upgrade detection
         $stored_version = get_option('flowganise_version');
         
-        if ($stored_version !== FLOWGANISE_VERSION) {
-            update_option('flowganise_version', FLOWGANISE_VERSION);
+        if ($stored_version !== ANRY_VERSION) {
+            update_option('flowganise_version', ANRY_VERSION);
             
             // Clear any caches
             $this->clear_caches();
             
             // Run any version-specific upgrade routines
             if (!empty($stored_version)) {
-                $this->maybe_upgrade($stored_version, FLOWGANISE_VERSION);
+                $this->maybe_upgrade($stored_version, ANRY_VERSION);
             }
         }
     }
@@ -116,53 +126,63 @@ class Flowganise_Analytics {
     
     private function clear_caches() {
         // Use our centralized cache manager
-        Flowganise_Cache_Manager::clear_all_caches();
+        Anry_Cache_Manager::clear_all_caches();
     }
     
     private function maybe_upgrade($old_version, $new_version) {
         // Handle version-specific upgrades if needed
         // This can be expanded as the plugin evolves
-        error_log("Flowganise upgrade from {$old_version} to {$new_version}");
+        error_log("Anry upgrade from {$old_version} to {$new_version}");
     }
 
     public function add_menu() {
         add_options_page(
-            __('Flowganise Analytics', 'flowganise-analytics'),
-            __('Flowganise', 'flowganise-analytics'),
+            __('Anry Analytics', 'anry'),
+            __('Anry', 'anry'),
             'manage_options',
-            'flowganise-settings',
+            'anry-settings',
             array($this, 'settings_page')
         );
    
         // Add admin scripts only on our settings page
         add_action('admin_enqueue_scripts', function($hook) {
-            if ('settings_page_flowganise-settings' !== $hook) {
+            if ('settings_page_anry-settings' !== $hook) {
                 return;
             }
    
             wp_enqueue_script(
-                'flowganise-admin',
+                'anry-admin',
                 plugins_url('js/admin.js', __FILE__),
                 array('jquery'),
-                FLOWGANISE_VERSION,
+                ANRY_VERSION,
                 true
             );
 
-            // Determine the frontend URL based on environment
+            // Determine the frontend URL based on environment.
+            // app.anry.io, not anry.io: js/admin.js appends
+            // /oauth/wordpress/authorize to this, and that page lives in the
+            // app. anry.io is the separate marketing site and would 404 it.
+            // flowganise.com keeps working for installs still carrying it,
+            // because it redirects there rather than to the marketing site.
             $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
-            $flowganise_url = $is_local_dev ? 'http://localhost:3000' : 'https://flowganise.com';
+            $anry_url = $is_local_dev ? 'http://localhost:3000' : 'https://app.anry.io';
 
             // Override with constant if defined
-            if (defined('FLOWGANISE_APP_URL')) {
-                $flowganise_url = FLOWGANISE_APP_URL;
+            // ANRY_APP_URL is the current name; FLOWGANISE_APP_URL still works
+            // because it is documented for wp-config.php and a site already
+            // relying on it should not silently fall back to the default.
+            if (defined('ANRY_APP_URL')) {
+                $anry_url = ANRY_APP_URL;
+            } elseif (defined('FLOWGANISE_APP_URL')) {
+                $anry_url = FLOWGANISE_APP_URL;
             }
 
-            wp_localize_script('flowganise-admin', 'flowganiseAdmin', array(
+            wp_localize_script('anry-admin', 'anryAdmin', array(
                 'ajaxUrl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('flowganise_connect'),
-                'version' => FLOWGANISE_VERSION,
+                'version' => ANRY_VERSION,
                 'siteUrl' => get_site_url(),
-                'flowganiseUrl' => $flowganise_url // Make sure flowganiseUrl is properly set
+                'anryUrl' => $anry_url // Make sure anryUrl is properly set
             ));
         });
     }
@@ -172,14 +192,14 @@ class Flowganise_Analytics {
         $is_connected = !empty($settings['site_id']);
         ?>
         <div class="wrap">
-            <h1><?php echo esc_html__('Flowganise Analytics Settings', 'flowganise-analytics'); ?></h1>
+            <h1><?php echo esc_html__('Anry Analytics Settings', 'anry'); ?></h1>
             
             <?php if ($is_connected): ?>
                 <div class="notice notice-success">
                     <p>
                         <?php
                         printf(
-                            esc_html__('Connected to Flowganise (Site ID: %s)', 'flowganise-analytics'),
+                            esc_html__('Connected to Anry (Site ID: %s)', 'anry'),
                             esc_html($settings['site_id'])
                         );
                         ?>
@@ -189,7 +209,7 @@ class Flowganise_Analytics {
                 <?php if (!empty($settings['api_key'])): ?>
                 <table class="form-table" role="presentation">
                     <tr>
-                        <th scope="row"><?php esc_html_e('API Key', 'flowganise-analytics'); ?></th>
+                        <th scope="row"><?php esc_html_e('API Key', 'anry'); ?></th>
                         <td>
                             <code style="font-size: 12px; word-break: break-all;"><?php echo esc_html($settings['api_key']); ?></code>
                         </td>
@@ -199,15 +219,15 @@ class Flowganise_Analytics {
 
                 <p>
                     <button type="button" class="button button-secondary" id="flowganise-disconnect">
-                        <?php esc_html_e('Disconnect', 'flowganise-analytics'); ?>
+                        <?php esc_html_e('Disconnect', 'anry'); ?>
                     </button>
                 </p>
             <?php else: ?>
-                <p><?php esc_html_e('Connect your WordPress site with Flowganise to start tracking analytics.', 'flowganise-analytics'); ?></p>
+                <p><?php esc_html_e('Connect your WordPress site with Anry to start tracking analytics.', 'anry'); ?></p>
                 <div id="flowganise-connect-status"></div>
                 <p>
                     <button type="button" class="button button-primary" id="flowganise-connect">
-                        <?php esc_html_e('Connect with Flowganise', 'flowganise-analytics'); ?>
+                        <?php esc_html_e('Connect with Anry', 'anry'); ?>
                     </button>
                 </p>
             <?php endif; ?>
@@ -234,7 +254,7 @@ class Flowganise_Analytics {
             
             if ($deleted) {
                 wp_send_json_success(array(
-                    'message' => 'Successfully disconnected from Flowganise'
+                    'message' => 'Successfully disconnected from Anry'
                 ));
             } else {
                 wp_send_json_error('Failed to delete settings');
@@ -276,7 +296,7 @@ class Flowganise_Analytics {
             $api_key = isset($_POST['api_key']) ? sanitize_text_field($_POST['api_key']) : '';
 
             // Debug log
-            error_log('[Flowganise] save_settings - site_id: ' . $site_id . ', api_key: ' . $api_key . ', domain: ' . $domain);
+            error_log('[Anry] save_settings - site_id: ' . $site_id . ', api_key: ' . $api_key . ', domain: ' . $domain);
 
             // Save the settings
             update_option('flowganise_settings', array(
@@ -287,7 +307,7 @@ class Flowganise_Analytics {
             ));
 
             wp_send_json_success(array(
-                'message' => 'Successfully connected with Flowganise',
+                'message' => 'Successfully connected with Anry',
                 'site_id' => $site_id
             ));
             
@@ -311,14 +331,14 @@ class Flowganise_Analytics {
         if ($is_local_dev) {
             $script_url = 'http://localhost:5173/index.min.js?site-id=' . urlencode($site_id);
         } else {
-            $script_url = 'https://tracker.flowganise.com/t.js?site-id=' . urlencode($site_id);
+            $script_url = 'https://tracker.anry.io/t.js?site-id=' . urlencode($site_id);
         }
         ?>
         <script src="<?php echo esc_url($script_url); ?>" async></script>
         <?php
         if ($is_local_dev || $this->is_debug_mode()): ?>
         <script>
-            console.log('Flowganise: Version <?php echo esc_js(FLOWGANISE_VERSION); ?>');
+            console.log('Anry: Version <?php echo esc_js(ANRY_VERSION); ?>');
         </script>
         <?php endif;
     }
@@ -387,7 +407,7 @@ class Flowganise_Analytics {
             'flowganise-sync',
             plugins_url('js/sync-session.js', __FILE__),
             array(),
-            FLOWGANISE_VERSION,
+            ANRY_VERSION,
             true
         );
 
@@ -400,7 +420,7 @@ class Flowganise_Analytics {
     /**
      * Server-side purchase tracking via woocommerce_checkout_order_processed hook.
      * Fires for ALL payment methods (including COD) immediately after checkout.
-     * Sends purchase event directly to Flowganise API (like Shopify Web Pixel).
+     * Sends purchase event directly to Anry API (like Shopify Web Pixel).
      *
      * @param int $order_id The WooCommerce order ID.
      */
@@ -498,7 +518,7 @@ class Flowganise_Analytics {
             'url' => $order->get_checkout_order_received_url()
         );
 
-        // Send to Flowganise API
+        // Send to Anry API
         $api_key = $this->get_events_api_key();
         if (empty($api_key)) {
             return;
@@ -508,7 +528,7 @@ class Flowganise_Analytics {
         // For local dev, use host.docker.internal since PHP runs inside Docker container
         // (unlike the tracker script which runs in the browser on the host machine)
         $is_local_dev = defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true;
-        $api_base_url = $is_local_dev ? 'http://host.docker.internal:4000' : 'https://api.flowganise.com';
+        $api_base_url = $is_local_dev ? 'http://host.docker.internal:4000' : 'https://api.anry.io';
         $api_url = $api_base_url . '/api/events?key=' . $api_key;
 
         // Build headers - include browser user agent if available (for device detection)
@@ -527,16 +547,16 @@ class Flowganise_Analytics {
 
         if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 202) {
             if ($this->is_debug_mode()) {
-                error_log('Flowganise: Purchase tracked server-side for order ' . $order->get_order_number());
+                error_log('Anry: Purchase tracked server-side for order ' . $order->get_order_number());
             }
         } else {
             $error_msg = is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_response_code($response);
-            error_log('Flowganise: Failed to track purchase server-side for order ' . $order->get_order_number() . ' - ' . $error_msg);
+            error_log('Anry: Failed to track purchase server-side for order ' . $order->get_order_number() . ' - ' . $error_msg);
         }
     }
 
     /**
-     * Get order items in Flowganise format.
+     * Get order items in Anry format.
      *
      * @param WC_Order $order The WooCommerce order.
      * @return array Array of item data.
@@ -577,7 +597,7 @@ class Flowganise_Analytics {
             return FLOWGANISE_EVENTS_API_KEY;
         }
 
-        error_log('[Flowganise] No API key configured. Connect your site via the Flowganise dashboard.');
+        error_log('[Anry] No API key configured. Connect your site via the Anry dashboard.');
         return null;
     }
 
@@ -586,6 +606,6 @@ class Flowganise_Analytics {
 // Initialize plugin
 function flowganise_init() {
     // Wait for init hook to ensure proper loading order
-    Flowganise_Analytics::instance(); 
+    Anry_Analytics::instance(); 
 }
 add_action('init', 'flowganise_init', 5);

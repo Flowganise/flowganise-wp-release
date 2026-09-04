@@ -1,10 +1,10 @@
 <?php
-class Flowganise_Updater {
-    private $plugin_slug = 'flowganise';
+class Anry_Updater {
+    private $plugin_slug = 'anry';
     private $plugin_basename;
     private $version;
-    private $github_repo = 'Flowganise/flowganise-wp-release';
-    private $github_api = 'https://api.github.com/repos/Flowganise/flowganise-wp-release';
+    private $github_repo = 'Anry/flowganise-wp-release';
+    private $github_api = 'https://api.github.com/repos/Anry/flowganise-wp-release';
     private $transient_key = 'flowganise_github_api_response';
     private $cache_time = 43200; // 12 hours in seconds
 
@@ -58,19 +58,19 @@ class Flowganise_Updater {
             ));
 
             if (is_wp_error($response)) {
-                error_log('Flowganise Updater - GitHub API Error: ' . $response->get_error_message());
+                error_log('Anry Updater - GitHub API Error: ' . $response->get_error_message());
                 return $transient;
             }
 
             $code = wp_remote_retrieve_response_code($response);
             if ($code !== 200) {
-                error_log('Flowganise Updater - GitHub API returned code: ' . $code);
+                error_log('Anry Updater - GitHub API returned code: ' . $code);
                 return $transient;
             }
 
             $release = json_decode(wp_remote_retrieve_body($response));
             if (empty($release)) {
-                error_log('Flowganise Updater - No release data found');
+                error_log('Anry Updater - No release data found');
                 return $transient;
             }
             
@@ -154,22 +154,22 @@ class Flowganise_Updater {
         ));
 
         if (is_wp_error($response)) {
-            error_log('Flowganise Updater - GitHub API Error in plugin_info: ' . $response->get_error_message());
+            error_log('Anry Updater - GitHub API Error in plugin_info: ' . $response->get_error_message());
             return $false;
         }
 
         $release = json_decode(wp_remote_retrieve_body($response));
         if (empty($release)) {
-            error_log('Flowganise Updater - No release data found in plugin_info');
+            error_log('Anry Updater - No release data found in plugin_info');
             return $false;
         }
 
         $plugin_info = array(
-            'name' => 'Flowganise Analytics',
+            'name' => 'Anry Analytics',
             'slug' => $this->plugin_slug,
             'version' => $release->tag_name,
-            'author' => '<a href="https://flowganise.com">Flowganise</a>',
-            'homepage' => 'https://flowganise.com',
+            'author' => '<a href="https://anry.io">Anry</a>',
+            'homepage' => 'https://anry.io',
             'requires' => '5.0',
             'tested' => get_bloginfo('version'),
             'last_updated' => $release->published_at,
@@ -187,10 +187,10 @@ class Flowganise_Updater {
 
     private function get_description() {
         return '
-            <p>Integrates Flowganise Analytics with your WordPress site.</p>
+            <p>Integrates Anry Analytics with your WordPress site.</p>
             <h4>Features</h4>
             <ul>
-                <li>One-click connection with your Flowganise account</li>
+                <li>One-click connection with your Anry account</li>
                 <li>Automatic tracking script installation</li>
                 <li>Simple WordPress admin interface</li>
                 <li>No configuration needed</li>
@@ -217,8 +217,8 @@ class Flowganise_Updater {
             $this->clear_cache();
             
             // Use our centralized cache manager
-            if (class_exists('Flowganise_Cache_Manager')) {
-                Flowganise_Cache_Manager::clear_all_caches();
+            if (class_exists('Anry_Cache_Manager')) {
+                Anry_Cache_Manager::clear_all_caches();
             }
             
             // CDN Enabler

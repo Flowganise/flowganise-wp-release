@@ -1,5 +1,5 @@
 /**
- * Flowganise Session Sync
+ * Anry Session Sync
  *
  * Syncs localStorage fgan_sessionId/fgan_visitorId and device info to a server-side transient.
  * Also sets a cookie with the visitor ID so the woocommerce_checkout_order_processed
@@ -14,7 +14,7 @@
     // Only sync if we have both IDs and the flowganiseSync config is available
     if (sessionId && visitorId && typeof flowganiseSync !== 'undefined') {
         var formData = new FormData();
-        formData.append('action', 'flowganise_sync_session');
+        formData.append('action', 'anry_sync_session');
         formData.append('nonce', flowganiseSync.nonce);
         formData.append('session_id', sessionId);
         formData.append('visitor_id', visitorId);

@@ -1,13 +1,13 @@
 <?php
 /**
- * Debugging helper for Flowganise plugin
+ * Debugging helper for Anry plugin
  */
 
 defined('ABSPATH') || exit;
 
-class Flowganise_Debug {
+class Anry_Debug {
     public function __construct() {
-        add_action('wp_ajax_flowganise_debug', array($this, 'handle_debug_request'));
+        add_action('wp_ajax_anry_debug', array($this, 'handle_debug_request'));
         add_action('admin_footer', array($this, 'maybe_add_debug_button'));
     }
     
@@ -15,16 +15,16 @@ class Flowganise_Debug {
         $screen = get_current_screen();
         
         if (!current_user_can('manage_options') || 
-            !$screen || $screen->id !== 'settings_page_flowganise-settings') {
+            !$screen || $screen->id !== 'settings_page_anry-settings') {
             return;
         }
         
         ?>
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ccc;">
-            <h3><?php esc_html_e('Troubleshooting Tools', 'flowganise-analytics'); ?></h3>
+            <h3><?php esc_html_e('Troubleshooting Tools', 'anry'); ?></h3>
             <p>
                 <button type="button" class="button" id="flowganise-debug">
-                    <?php esc_html_e('Run Diagnostics', 'flowganise-analytics'); ?>
+                    <?php esc_html_e('Run Diagnostics', 'anry'); ?>
                 </button>
             </p>
             <div id="flowganise-debug-output"></div>
@@ -48,7 +48,7 @@ class Flowganise_Debug {
             
             // Gather diagnostic information
             $diagnostics = array(
-                'plugin_version' => FLOWGANISE_VERSION,
+                'plugin_version' => ANRY_VERSION,
                 'wp_version' => get_bloginfo('version'),
                 'php_version' => phpversion(),
                 'is_multisite' => is_multisite(),
@@ -170,5 +170,5 @@ class Flowganise_Debug {
 
 // Initialize the debug helper if we're in the admin area
 if (is_admin()) {
-    new Flowganise_Debug();
+    new Anry_Debug();
 }

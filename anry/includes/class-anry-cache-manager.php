@@ -1,11 +1,11 @@
 <?php
 /**
- * Cache management utilities for Flowganise
+ * Cache management utilities for Anry
  */
 
 defined('ABSPATH') || exit;
 
-class Flowganise_Cache_Manager {
+class Anry_Cache_Manager {
     /**
      * Clear all known WordPress caches
      */

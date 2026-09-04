@@ -1,7 +1,7 @@
 jQuery(document).ready(function ($) {
   // Log version info to help with debugging
-  if (typeof flowganiseAdmin !== "undefined" && flowganiseAdmin.version) {
-    console.log("Flowganise Admin JS - Version: " + flowganiseAdmin.version);
+  if (typeof anryAdmin !== "undefined" && anryAdmin.version) {
+    console.log("Anry Admin JS - Version: " + anryAdmin.version);
   }
 
   $("#flowganise-connect").on("click", function () {
@@ -10,18 +10,19 @@ jQuery(document).ready(function ($) {
 
     $button.prop("disabled", true);
     $status.html(
-      '<div class="notice notice-info"><p>Redirecting to Flowganise...</p></div>'
+      '<div class="notice notice-info"><p>Redirecting to Anry...</p></div>'
     );
 
     // Store that we're connecting for when we return
     localStorage.setItem("flowganise_connecting", "true");
 
-    // Make sure flowganiseUrl is defined and log all available properties in flowganiseAdmin for debugging
-    console.log("flowganiseAdmin object:", flowganiseAdmin);
+    // Make sure anryUrl is defined and log all available properties in anryAdmin for debugging
+    console.log("anryAdmin object:", anryAdmin);
 
-    // Default URL if flowganiseUrl is not defined
+    // Default URL if anryUrl is not defined. Must stay in step with
+    // $anry_url in anry.php, which normally supplies it.
     const baseUrl =
-      flowganiseAdmin.flowganiseUrl || "https://flowganise.com";
+      anryAdmin.anryUrl || "https://app.anry.io";
 
     // Properly construct the authorization URL using absolute URLs
     const authUrl =
@@ -37,16 +38,16 @@ jQuery(document).ready(function ($) {
   });
 
   $("#flowganise-disconnect").on("click", function () {
-    if (confirm("Are you sure you want to disconnect from Flowganise?")) {
+    if (confirm("Are you sure you want to disconnect from Anry?")) {
       const $button = $(this);
       $button.prop("disabled", true);
 
       // Simple disconnect by removing settings and reloading
       $.post(
-        flowganiseAdmin.ajaxUrl,
+        anryAdmin.ajaxUrl,
         {
-          action: "flowganise_disconnect",
-          _ajax_nonce: flowganiseAdmin.nonce,
+          action: "anry_disconnect",
+          _ajax_nonce: anryAdmin.nonce,
         },
         function () {
           window.location.reload();
@@ -77,14 +78,14 @@ jQuery(document).ready(function ($) {
       '<div class="notice notice-info"><p>Finalizing connection...</p></div>'
     );
 
-    console.log("Flowganise: Saving settings - site_id:", site_id, "api_key:", api_key);
+    console.log("Anry: Saving settings - site_id:", site_id, "api_key:", api_key);
 
     // Save connection settings directly (api_key comes from URL)
     $.post(
-      flowganiseAdmin.ajaxUrl,
+      anryAdmin.ajaxUrl,
       {
-        action: "flowganise_save_settings",
-        _ajax_nonce: flowganiseAdmin.nonce,
+        action: "anry_save_settings",
+        _ajax_nonce: anryAdmin.nonce,
         site_id: site_id,
         api_key: api_key || "",
         domain: window.location.origin,
@@ -93,11 +94,11 @@ jQuery(document).ready(function ($) {
       .then(function (response) {
         if (response.success) {
           $("#flowganise-connect-status").html(
-            '<div class="notice notice-success"><p>Successfully connected with Flowganise!</p></div>'
+            '<div class="notice notice-success"><p>Successfully connected with Anry!</p></div>'
           );
           // Reload without query params to clean up URL
           setTimeout(function () {
-            window.location.href = window.location.pathname + "?page=flowganise-settings";
+            window.location.href = window.location.pathname + "?page=anry-settings";
           }, 500);
         } else {
           $("#flowganise-connect-status").html(
@@ -109,7 +110,7 @@ jQuery(document).ready(function ($) {
         }
       })
       .catch(function (err) {
-        console.error("Flowganise connection error:", err);
+        console.error("Anry connection error:", err);
         $("#flowganise-connect-status").html(
           '<div class="notice notice-error"><p>Error connecting: ' +
             err.message +
