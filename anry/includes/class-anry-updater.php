@@ -3,8 +3,8 @@ class Anry_Updater {
     private $plugin_slug = 'anry';
     private $plugin_basename;
     private $version;
-    private $github_repo = 'Anry/flowganise-wp-release';
-    private $github_api = 'https://api.github.com/repos/Anry/flowganise-wp-release';
+    private $github_repo = 'Flowganise/flowganise-wp-release';
+    private $github_api = 'https://api.github.com/repos/Flowganise/flowganise-wp-release';
     private $transient_key = 'flowganise_github_api_response';
     private $cache_time = 43200; // 12 hours in seconds
 
@@ -165,7 +165,7 @@ class Anry_Updater {
         }
 
         $plugin_info = array(
-            'name' => 'Anry Analytics',
+            'name' => 'Anry',
             'slug' => $this->plugin_slug,
             'version' => $release->tag_name,
             'author' => '<a href="https://anry.io">Anry</a>',
@@ -187,7 +187,7 @@ class Anry_Updater {
 
     private function get_description() {
         return '
-            <p>Integrates Anry Analytics with your WordPress site.</p>
+            <p>Integrates Anry with your WordPress site.</p>
             <h4>Features</h4>
             <ul>
                 <li>One-click connection with your Anry account</li>

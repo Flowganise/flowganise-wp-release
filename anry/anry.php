@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Anry Analytics
+ * Plugin Name: Anry
  * Plugin URI: https://anry.io
- * Description: Integrates Anry analytics tracking with WordPress.
- * Version: 3.2.0
+ * Description: Integrates Anry tracking with WordPress.
+ * Version: 3.2.1
  * Author: Anry
  * Author URI: https://anry.io
  * Text Domain: anry
@@ -14,7 +14,7 @@
 
 defined('ABSPATH') || exit;
 
-define('ANRY_VERSION', '3.2.0');
+define('ANRY_VERSION', '3.2.1');
 
 class Anry_Analytics {
     private static $instance = null;
@@ -137,7 +137,7 @@ class Anry_Analytics {
 
     public function add_menu() {
         add_options_page(
-            __('Anry Analytics', 'anry'),
+            __('Anry', 'anry'),
             __('Anry', 'anry'),
             'manage_options',
             'anry-settings',
@@ -192,7 +192,7 @@ class Anry_Analytics {
         $is_connected = !empty($settings['site_id']);
         ?>
         <div class="wrap">
-            <h1><?php echo esc_html__('Anry Analytics Settings', 'anry'); ?></h1>
+            <h1><?php echo esc_html__('Anry Settings', 'anry'); ?></h1>
             
             <?php if ($is_connected): ?>
                 <div class="notice notice-success">
